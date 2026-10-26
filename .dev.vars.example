@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars and add your own token.
+# Create or find your token at https://ipinfo.io/dashboard/token
+IPINFO_TOKEN=your_ipinfo_token_here

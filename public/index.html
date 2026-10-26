@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" id="theme-color" content="#f6f8fc" />
+    <title>IP Lookup — See what the internet sees</title>
+    <meta
+      name="description"
+      content="A fast, private IP address lookup powered by IPinfo Lite. Check your public IPv4 or IPv6 address, country, and network."
+    />
+    <meta property="og:title" content="IP Lookup — See what the internet sees" />
+    <meta
+      property="og:description"
+      content="Check your public IP address, country, and network in a single tap. No tracking, no clutter."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="page-glow" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient
+                id="logo-gradient"
+                x1="4"
+                y1="4"
+                x2="44"
+                y2="44"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#22D3EE" />
+                <stop offset="1" stop-color="#6366F1" />
+              </linearGradient>
+            </defs>
+            <rect x="1" y="1" width="46" height="46" rx="14" fill="url(#logo-gradient)" />
+            <circle cx="24" cy="24" r="12.5" stroke="white" stroke-width="2.2" opacity=".92" />
+            <ellipse cx="24" cy="24" rx="5.6" ry="12.5" stroke="white" stroke-width="1.8" opacity=".7" />
+            <path d="M11.5 24h25" stroke="white" stroke-width="1.8" opacity=".7" />
+            <circle cx="24" cy="24" r="2.8" fill="white" />
+          </svg>
+        </span>
+        <span class="brand-name">IP <span>Lookup</span></span>
+      </a>
+
+      <button
+        class="theme-toggle"
+        id="theme-toggle"
+        type="button"
+        aria-label="Switch to dark theme"
+        aria-pressed="false"
+      >
+        <svg
+          class="icon-sun"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" />
+        </svg>
+        <svg
+          class="icon-moon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z" />
+        </svg>
+      </button>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span> IP intelligence, simplified</p>
+        <h1 id="hero-title">See what the <span class="gradient-text">internet sees.</span></h1>
+        <p class="lede">
+          Check your public IP address, country, and network in a single tap.
+          No tracking, no clutter.
+        </p>
+
+        <form class="lookup-form" id="lookup-form" novalidate>
+          <label class="sr-only" for="ip-input">IP address</label>
+          <div class="input-wrap">
+            <div class="input-field">
+              <svg
+                class="search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                id="ip-input"
+                name="ip"
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="Enter an IPv4 or IPv6 address"
+                aria-describedby="form-hint"
+              />
+            </div>
+            <button class="btn btn-primary" type="submit" id="lookup-button">
+              <span class="spinner" aria-hidden="true"></span>
+              <span>Look up</span>
+            </button>
+          </div>
+          <p class="form-hint" id="form-hint">
+            Leave blank to check your own connection.
+            <button class="link-button" id="use-my-ip" type="button" hidden>Use my IP</button>
+          </p>
+        </form>
+      </section>
+
+      <noscript>
+        <p class="noscript">This lookup needs JavaScript. Enable it and reload the page.</p>
+      </noscript>
+
+      <section class="result" id="result" aria-live="polite" aria-busy="true">
+        <div class="result-head">
+          <div>
+            <p class="result-label" id="result-label">Your public IP</p>
+            <div class="ip-row">
+              <h2 class="ip-value" id="ip-value">Looking up…</h2>
+              <button class="copy-button" id="copy-button" type="button" aria-label="Copy IP address" hidden>
+                <svg
+                  class="copy-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                  <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                </svg>
+                <svg
+                  class="check-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m5 12 4.5 4.5L19 7" />
+                </svg>
+              </button>
+            </div>
+            <p class="ip-meta" id="ip-meta">Fetching your connection details…</p>
+          </div>
+          <div class="country-badge" id="country-badge" role="img" aria-label="Country code">—</div>
+        </div>
+
+        <div class="badges" id="badges" hidden></div>
+
+        <dl class="stats">
+          <div class="stat">
+            <dt>Country</dt>
+            <dd id="stat-country">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Continent</dt>
+            <dd id="stat-continent">—</dd>
+          </div>
+          <div class="stat">
+            <dt>ASN</dt>
+            <dd id="stat-asn">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Organization</dt>
+            <dd id="stat-org">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Domain</dt>
+            <dd id="stat-domain">—</dd>
+          </div>
+          <div class="stat">
+            <dt>IP version</dt>
+            <dd id="stat-version">—</dd>
+          </div>
+        </dl>
+
+        <div class="error" id="error" role="alert" hidden>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v6M12 17h.01" />
+          </svg>
+          <p id="error-message"></p>
+        </div>
+      </section>
+
+      <section class="info-grid" aria-label="About this lookup">
+        <article class="info-card">
+          <span class="info-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+            </svg>
+          </span>
+          <h3>Country-level, not creep-level</h3>
+          <p>
+            IPinfo Lite returns country, continent, and network data — never
+            precise location.
+          </p>
+        </article>
+
+        <article class="info-card">
+          <span class="info-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3 4.5 6v5.5c0 4.5 3.2 7.7 7.5 9.5 4.3-1.8 7.5-5 7.5-9.5V6L12 3Z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+          </span>
+          <h3>Your token stays server-side</h3>
+          <p>
+            Requests are proxied through a Cloudflare Worker, so your IPinfo
+            key never reaches the browser.
+          </p>
+        </article>
+
+        <article class="info-card">
+          <span class="info-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" />
+            </svg>
+          </span>
+          <h3>Light or dark, your call</h3>
+          <p>
+            The theme follows your system by default and remembers your choice
+            in this browser.
+          </p>
+        </article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Data by
+        <a href="https://ipinfo.io/developers/lite-api" target="_blank" rel="noopener noreferrer">IPinfo Lite</a>.
+        Built on Cloudflare Workers.
+      </p>
+      <p>No cookies. No analytics. Theme preference stays in your browser.</p>
+    </footer>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
