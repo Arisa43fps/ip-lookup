@@ -37,6 +37,32 @@ function calledUrl(fetchMock: ReturnType<typeof vi.fn<FetchLike>>): URL {
   return new URL(input.url);
 }
 
+function calledUrls(fetchMock: ReturnType<typeof vi.fn<FetchLike>>): URL[] {
+  return fetchMock.mock.calls.map(([input]) => {
+    if (input instanceof URL) return input;
+    if (typeof input === "string") return new URL(input);
+    return new URL(input.url);
+  });
+}
+
+type DnsStub = Record<string, Response | object>;
+
+/** Routes Cloudflare DoH calls to `dns` and everything else to `ipinfo`. */
+function mockDns(
+  dns: DnsStub,
+  ipinfo: () => Response = () => Response.json(sample),
+) {
+  return vi.fn<FetchLike>(async (input) => {
+    const url =
+      input instanceof Request ? new URL(input.url) : new URL(String(input));
+    if (url.hostname !== "cloudflare-dns.com") return ipinfo();
+
+    const stub = dns[url.searchParams.get("type") ?? "A"];
+    if (!stub) return Response.json({ Status: 0 });
+    return stub instanceof Response ? stub : Response.json(stub);
+  });
+}
+
 function mockUpstream(
   response: Response | (() => Response) = () => Response.json(sample),
 ) {
@@ -162,6 +188,127 @@ describe("GET /api/ip", () => {
   });
 });
 
+describe("GET /api/ip with a domain", () => {
+  it("resolves the domain, then looks up the resulting IP", async () => {
+    const fetchMock = mockDns(
+      {
+        A: {
+          Status: 0,
+          Answer: [{ name: "example.com.", type: 1, data: "93.184.216.34" }],
+        },
+      },
+      () => Response.json({ ...sample, ip: "93.184.216.34" }),
+    );
+
+    const response = await handleRequest(
+      makeRequest("/api/ip?ip=Example.COM"),
+      makeEnv(),
+      fetchMock,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      ip: "93.184.216.34",
+      hostname: "example.com",
+    });
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
+
+    const urls = calledUrls(fetchMock);
+    expect(urls).toHaveLength(2);
+    expect(urls[0]?.hostname).toBe("cloudflare-dns.com");
+    expect(urls[0]?.searchParams.get("name")).toBe("example.com");
+    expect(urls[0]?.searchParams.get("type")).toBe("A");
+    expect(urls[1]?.pathname).toBe("/lite/93.184.216.34");
+  });
+
+  it("falls back to AAAA when there is no A record", async () => {
+    const fetchMock = mockDns(
+      {
+        AAAA: {
+          Status: 0,
+          Answer: [{ name: "example.com.", type: 28, data: "2001:db8::1" }],
+        },
+      },
+      () => Response.json({ ...sample, ip: "2001:db8::1" }),
+    );
+
+    const response = await handleRequest(
+      makeRequest("/api/ip?ip=example.com"),
+      makeEnv(),
+      fetchMock,
+    );
+
+    expect(response.status).toBe(200);
+    expect(calledUrls(fetchMock).map((url) => url.pathname)).toEqual([
+      "/dns-query",
+      "/dns-query",
+      "/lite/2001:db8::1",
+    ]);
+  });
+
+  it("ignores non-matching records such as CNAMEs", async () => {
+    const fetchMock = mockDns(
+      {
+        A: {
+          Status: 0,
+          Answer: [
+            { name: "example.com.", type: 5, data: "edge.example.net." },
+            { name: "edge.example.net.", type: 1, data: "93.184.216.34" },
+          ],
+        },
+      },
+      () => Response.json({ ...sample, ip: "93.184.216.34" }),
+    );
+
+    const response = await handleRequest(
+      makeRequest("/api/ip?ip=example.com"),
+      makeEnv(),
+      fetchMock,
+    );
+
+    expect(response.status).toBe(200);
+    expect(calledUrls(fetchMock)[1]?.pathname).toBe("/lite/93.184.216.34");
+  });
+
+  it("returns 404 when the domain has no address", async () => {
+    const fetchMock = mockDns({ A: { Status: 3 } });
+
+    const response = await handleRequest(
+      makeRequest("/api/ip?ip=missing.example"),
+      makeEnv(),
+      fetchMock,
+    );
+
+    expect(response.status).toBe(404);
+    expect(calledUrls(fetchMock)).toHaveLength(1);
+  });
+
+  it("maps resolver failures to 502", async () => {
+    const fetchMock = mockDns({ A: new Response("boom", { status: 500 }) });
+
+    const response = await handleRequest(
+      makeRequest("/api/ip?ip=example.com"),
+      makeEnv(),
+      fetchMock,
+    );
+
+    expect(response.status).toBe(502);
+  });
+
+  it("rejects a malformed hostname without resolving it", async () => {
+    const fetchMock = mockDns({});
+
+    const response = await handleRequest(
+      makeRequest("/api/ip?ip=exa_mple.com"),
+      makeEnv(),
+      fetchMock,
+    );
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("static assets", () => {
   it("falls through to the assets binding with security headers", async () => {
     const assetsFetch = vi.fn(
@@ -177,9 +324,11 @@ describe("static assets", () => {
     const response = await handleRequest(makeRequest("/"), env);
 
     expect(assetsFetch).toHaveBeenCalledOnce();
-    expect(response.headers.get("Content-Security-Policy")).toContain(
-      "default-src 'self'",
-    );
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("img-src 'self' data:");
+    // Flags are vendored in public/flags, so no third-party image host is needed.
+    expect(csp).not.toContain("flagcdn");
     expect(await response.text()).toBe("<h1>Hello</h1>");
   });
 

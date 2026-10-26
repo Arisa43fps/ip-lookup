@@ -39,6 +39,37 @@ function setText(element, value) {
     typeof value === "string" && value.trim() ? value : "—";
 }
 
+function renderCountryBadge(data) {
+  const code =
+    typeof data.country_code === "string" ? data.country_code.trim() : "";
+
+  countryBadge.setAttribute(
+    "aria-label",
+    data.country
+      ? `${data.country}${code ? ` (${code.toUpperCase()})` : ""}`
+      : "Country unknown",
+  );
+
+  if (!/^[a-z]{2}$/i.test(code)) {
+    countryBadge.replaceChildren(document.createTextNode("—"));
+    return;
+  }
+
+  const key = code.toLowerCase();
+  const image = document.createElement("img");
+  image.className = "country-flag";
+  // The wrapper carries the accessible label, so the image stays decorative.
+  image.alt = "";
+  image.decoding = "async";
+  image.addEventListener("error", () => {
+    // A missing flag file should not leave an empty frame.
+    countryBadge.replaceChildren(document.createTextNode(key.toUpperCase()));
+  });
+  image.src = `/flags/${key}.svg`;
+
+  countryBadge.replaceChildren(image);
+}
+
 function renderBadges(data) {
   const badges = [];
 
@@ -61,20 +92,18 @@ function render(data, { own }) {
 
   ipValue.textContent = data.ip;
   copyButton.hidden = false;
-  resultLabel.textContent = own ? "Your public IP" : "Looked up IP";
+  resultLabel.textContent = own
+    ? "Your public IP"
+    : data.hostname
+      ? `Resolved from ${data.hostname}`
+      : "Looked up IP";
 
   const details = [data.country, data.as_name].filter(Boolean);
   ipMeta.textContent = details.length
     ? details.join(" · ")
     : "No country or network data available.";
 
-  countryBadge.textContent = data.country_code || "—";
-  countryBadge.setAttribute(
-    "aria-label",
-    data.country
-      ? `${data.country} (${data.country_code || "country code unavailable"})`
-      : "Country unknown",
-  );
+  renderCountryBadge(data);
 
   setText(statCountry, data.country);
   setText(statContinent, data.continent);
@@ -88,7 +117,7 @@ function render(data, { own }) {
   useMyIp.hidden = own;
 
   document.title = `${data.ip} · IP Lookup`;
-  updateUrl(own ? null : data.ip);
+  updateUrl(own ? null : data.hostname || data.ip);
 }
 
 function showError(message) {

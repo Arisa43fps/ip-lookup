@@ -1,6 +1,8 @@
+import { isHostname } from "./lib/host";
 import { isIP } from "./lib/ip";
 
 const IPINFO_ENDPOINT = "https://api.ipinfo.io/lite";
+const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 const UPSTREAM_TIMEOUT_MS = 5_000;
 
 const STATIC_SECURITY_HEADERS: Record<string, string> = {
@@ -67,25 +69,48 @@ async function handleLookup(
     return json({ error: "Method not allowed." }, 405, { Allow: "GET" });
   }
 
-  const explicitIp = url.searchParams.get("ip")?.trim() ?? "";
-  const ip = explicitIp || clientIp(request);
-
-  if (!ip) {
-    return json(
-      { error: "Could not determine your IP address. Enter an IP address to look up." },
-      400,
-    );
-  }
-
-  if (!isIP(ip)) {
-    return json({ error: "Enter a valid IPv4 or IPv6 address." }, 400);
-  }
-
   if (!env.IPINFO_TOKEN) {
     return json(
       { error: "IPinfo is not configured. Add the IPINFO_TOKEN secret." },
       500,
     );
+  }
+
+  const query = url.searchParams.get("ip")?.trim() ?? "";
+  const explicit = query.length > 0;
+
+  let ip: string;
+  let hostname: string | null = null;
+
+  if (!explicit) {
+    const visitor = clientIp(request);
+    if (!visitor || !isIP(visitor)) {
+      return json(
+        {
+          error:
+            "Could not determine your IP address. Enter an IP address or domain to look up.",
+        },
+        400,
+      );
+    }
+    ip = visitor;
+  } else if (isIP(query)) {
+    ip = query;
+  } else if (isHostname(query)) {
+    hostname = query.toLowerCase();
+
+    const resolved = await resolveHostname(hostname, fetchImpl);
+    if ("error" in resolved) {
+      return resolved.error === "not-found"
+        ? json({ error: `No IP address found for ${hostname}.` }, 404)
+        : json(
+            { error: "Could not resolve that domain. Try again in a moment." },
+            502,
+          );
+    }
+    ip = resolved.ip;
+  } else {
+    return json({ error: "Enter a valid IP address or domain name." }, 400);
   }
 
   const upstream = new URL(`${IPINFO_ENDPOINT}/${ip}`);
@@ -127,9 +152,75 @@ async function handleLookup(
     return json({ error: "IPinfo returned an unexpected response." }, 502);
   }
 
-  return json(data, 200, {
-    "Cache-Control": explicitIp ? "public, max-age=300" : "no-store",
+  return json(hostname ? { ...data, hostname } : data, 200, {
+    "Cache-Control": explicit ? "public, max-age=300" : "no-store",
   });
+}
+
+type Resolved = { ip: string } | { error: "not-found" | "unavailable" };
+
+interface DnsAnswer {
+  type?: number;
+  data?: string;
+}
+
+interface DnsResponse {
+  Status?: number;
+  Answer?: DnsAnswer[];
+}
+
+/**
+ * Resolves a hostname to an address through Cloudflare's DNS-over-HTTPS
+ * endpoint. IPv4 is preferred; AAAA is only queried when no A record exists,
+ * so IPv4-only visitors keep working with dual-stack hostnames.
+ */
+async function resolveHostname(
+  hostname: string,
+  fetchImpl: FetchLike,
+): Promise<Resolved> {
+  for (const [record, recordType] of [
+    ["A", 1],
+    ["AAAA", 28],
+  ] as const) {
+    const upstream = new URL(DOH_ENDPOINT);
+    upstream.searchParams.set("name", hostname);
+    upstream.searchParams.set("type", record);
+
+    let response: Response;
+    try {
+      response = await fetchImpl(upstream, {
+        headers: { Accept: "application/dns-json" },
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      });
+    } catch {
+      return { error: "unavailable" };
+    }
+
+    if (!response.ok) return { error: "unavailable" };
+
+    let body: DnsResponse;
+    try {
+      body = (await response.json()) as DnsResponse;
+    } catch {
+      return { error: "unavailable" };
+    }
+
+    if (body.Status === 3) return { error: "not-found" }; // NXDOMAIN
+    if (body.Status !== 0) return { error: "unavailable" };
+
+    // CNAMEs are skipped here; the resolver follows them and appends the
+    // matching A/AAAA record to the same answer section.
+    const answer = (body.Answer ?? []).find(
+      (entry) =>
+        entry.type === recordType &&
+        typeof entry.data === "string" &&
+        isIP(entry.data),
+    );
+
+    if (answer?.data) return { ip: answer.data };
+  }
+
+  return { error: "not-found" };
 }
 
 function clientIp(request: Request): string | null {
